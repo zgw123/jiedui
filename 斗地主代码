@@ -1,1 +1,1454 @@
+1.Card.java
+package com;
+
+import java.awt.Point;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
+
+import javax.swing.ImageIcon;
+import javax.swing.JLabel;
+
+public class Card extends JLabel implements MouseListener{
+
+	Main main;//Main类的引用
+	String name;//图片url名字
+	boolean up;//是否正反面
+	boolean canClick=false;//是否可被点击
+	boolean clicked=false;//是否点击过
+	public Card(Main m,String name,boolean up){
+		this.main=m;
+		this.name=name;
+		this.up=up;
+	    if(this.up)
+	    	this.turnFront();
+	    else {
+			this.turnRear();
+		}
+		this.setSize(71, 96);
+		this.setVisible(true);
+		this.addMouseListener(this);
+	}
+	//正面
+	public void turnFront() {
+		this.setIcon(new ImageIcon("images/" + name + ".gif"));
+		this.up = true;
+	}
+	//反面
+	public void turnRear() {
+		this.setIcon(new ImageIcon("images/rear.gif"));
+		this.up = false;
+	}
+	@Override
+	public void mouseClicked(MouseEvent e) {
+		// TODO Auto-generated method stub
+		if(canClick)
+		{
+			Point from=this.getLocation();
+			int step; //移动的距离
+			if(clicked)
+				step=-20;
+			else {
+				step=20;
+			}
+			clicked=!clicked; //反向
+			//当被选中的时候，向前移动一步/后退一步
+			Common.move(this,from,new Point(from.x,from.y-step));
+		}
+		
+		
+	}
+	public void mouseEntered(MouseEvent arg0) {}
+	public void mouseExited(MouseEvent arg0) {}
+	public void mousePressed(MouseEvent arg0) {}
+	public void mouseReleased(MouseEvent arg0) {}
+
+}
+2.CardType.java
+package com;
+
+public enum CardType {
+	c1,//单牌。
+	c2,//对子。
+	c3,//3不带。
+	c4,//炸弹。
+	c31,//3带1。
+	c32,//3带2。
+	c411,//4带2个单，或者一对
+	c422,//4带2对
+	c123,//连子。
+	c1122,//连队。
+	c111222,//飞机。
+	c11122234,//飞机带单排.
+	c1112223344,//飞机带对子.
+	c0//不能出牌
+}
+3.Common.java
+package com;
+
+import java.awt.Point;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.concurrent.Delayed;
+
+public class Common {
+	
+	//判断牌型
+	public static CardType jugdeType(List<Card> list){
+		//因为之前排序过所以比较好判断
+		int len=list.size();
+		//单牌,对子，3不带，4个一样炸弹
+		if(len<=4)
+		{	//如果第一个和最后个相同，说明全部相同
+			if(list.size()>0&&Common.getValue(list.get(0))==Common.getValue(list.get(len-1)))
+			{
+				switch (len) {
+				case 1:
+					return CardType.c1;
+				case 2:
+					return CardType.c2;
+				case 3:
+					return CardType.c3;
+				case 4:
+					return CardType.c4;
+				}
+			}
+			//双王,化为对子返回
+			if(len==2&&Common.getColor(list.get(1))==5)
+				return CardType.c2;
+			//当第一个和最后个不同时,3带1
+			if(len==4 &&((Common.getValue(list.get(0))==Common.getValue(list.get(len-2)))||
+					Common.getValue(list.get(1))==Common.getValue(list.get(len-1))))
+				return CardType.c31;
+			else {
+				return CardType.c0;
+			}
+		}
+		//当5张以上时，连字，3带2，飞机，2顺，4带2等等
+		if(len>=5)
+		{//现在按相同数字最大出现次数
+			Card_index card_index=new Card_index();
+			for(int i=0;i<4;i++)
+				card_index.a[i]=new ArrayList<Integer>();
+			//求出各种数字出现频率
+			Common.getMax( card_index,list); //a[0,1,2,3]分别表示重复1,2,3,4次的牌
+			//3带2 -----必含重复3次的牌
+			if(card_index.a[2].size()==1 &&card_index.a[1].size()==1 && len==5)
+				return CardType.c32;
+			//4带2(单,双)
+			if(card_index.a[3].size()==1 && len==6)
+				return CardType.c411;
+			if(card_index.a[3].size()==1 && card_index.a[1].size()==2 &&len==8)
+				return CardType.c422;
+			//单连,保证不存在王
+			if((Common.getColor(list.get(0))!=5)&&(card_index.a[0].size()==len) &&
+					(Common.getValue(list.get(0))-Common.getValue(list.get(len-1))==len-1))
+				return CardType.c123;
+			//连队
+			if(card_index.a[1].size()==len/2 && len%2==0 && len/2>=3
+					&&(Common.getValue(list.get(0))-Common.getValue(list.get(len-1))==(len/2-1)))
+				return CardType.c1122;
+			//飞机
+			if(card_index.a[2].size()==len/3 && (len%3==0) &&
+					(Common.getValue(list.get(0))-Common.getValue(list.get(len-1))==(len/3-1)))
+				return CardType.c111222;
+			//飞机带n单,n/2对
+			if(card_index.a[2].size()==len/4 &&
+					((Integer)(card_index.a[2].get(len/4-1))-(Integer)(card_index.a[2].get(0))==len/4-1))
+				return CardType.c11122234;
+				
+			//飞机带n双
+			if(card_index.a[2].size()==len/5 && card_index.a[2].size()==len/5 &&
+					((Integer)(card_index.a[2].get(len/5-1))-(Integer)(card_index.a[2].get(0))==len/5-1))
+				return CardType.c1112223344;
+				
+		}
+		return CardType.c0;
+	}
+	
+	//移动效果的函数,用于发牌
+	public static void move(Card card,Point from,Point to){
+		if(to.x!=from.x){
+			double k=(1.0)*(to.y-from.y)/(to.x-from.x);
+			double b=to.y-to.x*k;
+			int flag=0;//判断向左还是向右移动步幅
+			if(from.x<to.x)
+				flag=20;
+			else {
+				flag=-20;
+			}
+			for(int i=from.x;Math.abs(i-to.x)>20;i+=flag)
+			{
+				double y=k*i+b;//这里主要用的数学中的线性函数
+			
+				card.setLocation(i,(int)y);
+				try {
+					Thread.sleep(5); //延迟，可自己设置
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+		}
+		//位置校准
+		card.setLocation(to);
+	}
+	//对list排序
+	public static void order(List<Card> list){
+		Collections.sort(list,new Comparator<Card>() {
+			@Override
+			public int compare(Card o1, Card o2) {
+				// TODO Auto-generated method stub
+				int a1=Integer.parseInt(o1.name.substring(0, 1));//花色
+				int a2=Integer.parseInt(o2.name.substring(0,1));
+				int b1=Integer.parseInt(o1.name.substring(2,o1.name.length()));//数值
+				int b2=Integer.parseInt(o2.name.substring(2,o2.name.length()));
+				int flag=0;
+				//如果是王的话
+				if(a1==5) b1+=100;
+				if(a1==5&&b1==1) b1+=50;
+				if(a2==5) b2+=100;
+				if(a2==5&&b2==1) b2+=50;
+				//如果是A或者2
+				if(b1==1) b1+=20;
+				if(b2==1) b2+=20;
+				if(b1==2) b1+=30;
+				if(b2==2) b2+=30;
+				flag=b2-b1;
+				if(flag==0)
+					return a2-a1;
+				else {
+					return flag;
+				}
+			}
+		});
+	}
+	//重新定位 flag代表电脑1 ,2 或者是我
+	public static void rePosition(Main m,List<Card> list,int flag){
+		Point p=new Point();
+		if(flag==0)
+		{
+			p.x=50;
+			p.y=(450/2)-(list.size()+1)*15/2;
+		}
+		if(flag==1)
+		{//我的排序 _y=450 width=830
+			p.x=(800/2)-(list.size()+1)*21/2;
+			p.y=450;
+		}
+		if(flag==2)
+		{
+			p.x=700;
+			p.y=(450/2)-(list.size()+1)*15/2;
+		}
+		int len=list.size();
+		for(int i=0;i<len;i++){
+			Card card=list.get(i);
+			Common.move(card, card.getLocation(), p);
+			m.container.setComponentZOrder(card, 0);
+			if(flag==1)p.x+=21;
+			else p.y+=15;
+			
+		}
+	}
+	//地主牌权值，看是否抢地主
+	public static int getScore(List<Card> list){
+		int count=0;
+		for(int i=0,len=list.size();i<len;i++){
+			Card card=list.get(i);
+			if(card.name.substring(0, 1).equals("5"))
+			{
+				//System.out.println(card.name.substring(0, 1));
+				count+=5;
+			}
+			if(card.name.substring(2, card.name.length()).equals("2"))
+			{
+				//System.out.println(2);
+				count+=2;
+			}
+		}
+		return count;
+		
+	}
+	//返回花色
+	public static int getColor(Card card){
+		return Integer.parseInt(card.name.substring(0,1));
+	}
+	//返回值
+	public static int getValue(Card card){
+		int i= Integer.parseInt(card.name.substring(2,card.name.length()));
+		if(card.name.substring(2,card.name.length()).equals("2"))
+			i+=13;
+		if(card.name.substring(2,card.name.length()).equals("1"))
+			i+=13;
+		if(Common.getColor(card)==5)
+			i+=2;//是王
+		return i;
+	}
+	//得到最大相同数
+	public static void getMax(Card_index card_index,List<Card> list){
+		int count[]=new int[14];//1-13各算一种,王算第14种
+		for(int i=0;i<14;i++)
+			count[i]=0;
+		for(int i=0,len=list.size();i<len;i++){
+			if(Common.getColor(list.get(i))==5)
+				count[13]++;
+			else
+				count[Common.getValue(list.get(i))-1]++;
+		}
+		for(int i=0;i<14;i++)
+		{
+			switch (count[i]) {
+			case 1:
+				card_index.a[0].add(i+1);
+				break;
+			case 2:
+				card_index.a[1].add(i+1);
+				break;
+			case 3:
+				card_index.a[2].add(i+1);
+				break;
+			case 4:
+				card_index.a[3].add(i+1);
+				break;
+			}
+		}
+	}
+	//拆牌
+	public static Model getModel(List<Card> list){
+		//先复制一个list
+		List list2=new ArrayList<Card>(list);
+		Model model=new Model();
+		//------先拆炸弹
+		Common.getBoomb(list2, model); //ok
+		//------拆3带
+		Common.getThree(list2, model);
+		//拆飞机
+		Common.getPlane(list2, model);
+		//------拆对子
+		Common.getTwo(list2, model);
+		//拆连队
+		Common.getTwoTwo(list2, model);
+		//拆顺子
+		Common.get123(list2, model);
+		//拆单
+		Common.getSingle(list2, model);
+		return model;
+	}
+	//拆连子
+	public static void get123(List<Card> list,Model model){
+		List<Card> del=new ArrayList<Card>();//要删除的Cards
+		if(list.size()>0&&(Common.getValue(list.get(0))<7 ||Common.getValue(list.get(list.size()-1))>10))
+			return;
+		if(list.size()<5)
+			return;
+		for(int i=0,len=list.size();i<len;i++)
+		{
+			int k=i;
+			for(int j=i;j<len;j++){
+				if(Common.getValue(list.get(i))-Common.getValue(list.get(j))==j-i)
+				{
+					k=j;
+				}
+			}
+			if(k-i>=4)
+			{
+				String s="";
+				for(int j=i;j<k;j++)
+				{
+					s+=list.get(j).name+",";
+					del.add(list.get(j));
+				}
+				s+=list.get(k).name;
+				del.add(list.get(k));
+				model.a123.add(s);
+				i=k;
+			}
+		}
+		list.removeAll(del);
+	}
+	//拆双顺
+	public static void getTwoTwo(List<Card> list,Model model){
+		List<String> del=new ArrayList<String>();//要删除的Cards
+		//从model里面的对子找
+		List<String> l=model.a2;
+		if(l.size()<3)
+			return ;
+		Integer s[]=new Integer[l.size()];
+		for(int i=0,len=l.size();i<len;i++){
+			String []name=l.get(i).split(",");
+			s[i]=Integer.parseInt(name[0].substring(2,name[0].length()));
+		}
+		//s0,1,2,3,4  13,9,8,7,6
+		for(int i=0,len=l.size();i<len;i++){
+			int k=i;
+			for(int j=i;j<len;j++)
+			{
+				if(s[i]-s[j]==j-i)
+					k=j;
+			}
+			if(k-i>=2)//k=4 i=1
+			{//说明从i到k是连队
+				String ss="";
+				for(int j=i;j<k;j++)
+				{
+					ss+=l.get(j)+",";
+					del.add(l.get(j));
+				}
+				ss+=l.get(k);
+				model.a112233.add(ss);
+				del.add(l.get(k));
+				i=k;
+			}
+		}
+		l.removeAll(del);
+	}
+	//拆飞机
+	public static void getPlane(List<Card> list,Model model){
+		List<String> del=new ArrayList<String>();//要删除的Cards
+		//从model里面的3带找
+		List<String> l=model.a3;
+		if(l.size()<2)
+			return ;
+		Integer s[]=new Integer[l.size()];
+		for(int i=0,len=l.size();i<len;i++){
+			String []name=l.get(i).split(",");
+			s[i]=Integer.parseInt(name[0].substring(2,name[0].length()));
+		}
+		for(int i=0,len=l.size();i<len;i++){
+			int k=i;
+			for(int j=i;j<len;j++)
+			{
+				if(s[i]-s[j]==j-i)
+					k=j;
+			}
+			if(k!=i)
+			{//说明从i到k是飞机
+				String ss="";
+				for(int j=i;j<k;j++)
+				{
+					ss+=l.get(j)+",";
+					del.add(l.get(j));
+				}
+				ss+=l.get(k);
+				model.a111222.add(ss);
+				del.add(l.get(k));
+				i=k;
+			}
+		}
+		l.removeAll(del);
+	}
+	//拆炸弹
+	public static void getBoomb(List<Card> list,Model model){
+		List<Card> del=new ArrayList<Card>();//要删除的Cards
+		//王炸
+		if(list.size()>=2 &&Common.getColor(list.get(0))==5 && Common.getColor(list.get(1))==5)
+		{
+			model.a4.add(list.get(0).name+","+list.get(1).name); //按名字加入
+			del.add(list.get(0));
+			del.add(list.get(1));
+		}
+		//如果王不构成炸弹咋先拆单
+		if(Common.getColor(list.get(0))==5&&Common.getColor(list.get(1))!=5)
+		{
+			del.add(list.get(0));
+			model.a1.add(list.get(0).name);
+		}
+		list.removeAll(del);
+		//一般的炸弹
+		for(int i=0,len=list.size();i<len;i++){
+			if(i+3<len && Common.getValue(list.get(i))==Common.getValue(list.get(i+3)))
+			{
+				String s=list.get(i).name+",";
+				s+=list.get(i+1).name+",";
+				s+=list.get(i+2).name+",";
+				s+=list.get(i+3).name;
+				model.a4.add(s);
+				for(int j=i;j<=i+3;j++)
+					del.add(list.get(j));
+				i=i+3;
+			}
+		}
+		list.removeAll(del);
+	}
+	//拆3带
+	public static void getThree(List<Card> list,Model model){
+		List<Card> del=new ArrayList<Card>();//要删除的Cards
+		//连续3张相同
+		for(int i=0,len=list.size();i<len;i++){
+			if(i+2<len&&Common.getValue(list.get(i))==Common.getValue(list.get(i+2)))
+			{
+				String s=list.get(i).name+",";
+				s+=list.get(i+1).name+",";
+				s+=list.get(i+2).name;
+				model.a3.add(s);
+				for(int j=i;j<=i+2;j++)
+					del.add(list.get(j));
+				i=i+2;
+			}
+		}
+		list.removeAll(del);
+	}
+	//拆对子
+	public static void getTwo(List<Card> list,Model model){
+		List<Card> del=new ArrayList<Card>();//要删除的Cards
+		//连续2张相同
+		for(int i=0,len=list.size();i<len;i++){
+			if(i+1<len&&Common.getValue(list.get(i))==Common.getValue(list.get(i+1)))
+			{
+				String s=list.get(i).name+",";
+				s+=list.get(i+1).name;
+				model.a2.add(s);
+				for(int j=i;j<=i+1;j++)
+					del.add(list.get(j));
+				i=i+1;
+			}
+		}
+		list.removeAll(del);
+	}
+	//拆单牌
+	public static void getSingle(List<Card> list,Model model){
+		List<Card> del=new ArrayList<Card>();//要删除的Cards
+		//1
+		for(int i=0,len=list.size();i<len;i++){
+				model.a1.add(list.get(i).name);
+				del.add(list.get(i));
+			}
+		list.removeAll(del);
+	}
+	//隐藏之前出过的牌
+	public static void hideCards(List<Card> list){
+		for(int i=0,len=list.size();i<len;i++){
+			list.get(i).setVisible(false);
+		}
+	}
+	//检查牌的是否能出
+	public static int checkCards(List<Card> c,List<Card>[] current){
+		//找出当前最大的牌是哪个电脑出的,c是点选的牌
+		List<Card> currentlist=(current[0].size()>0)?current[0]:current[2];
+		CardType cType=Common.jugdeType(c);
+		//如果张数不同直接过滤
+		if(cType!=CardType.c4&&c.size()!=currentlist.size())
+			return 0;
+		//比较我的出牌类型
+		if(Common.jugdeType(c)!=Common.jugdeType(currentlist))
+		{
+			
+			return 0;
+		}
+		//比较出的牌是否要大
+		//王炸弹
+		if(cType==CardType.c4)
+		{
+			if(c.size()==2)
+				return 1;
+			if(currentlist.size()==2)
+				return 0;
+		}
+		//单牌,对子,3带,4炸弹
+		if(cType==CardType.c1||cType==CardType.c2||cType==CardType.c3||cType==CardType.c4){
+			if(Common.getValue(c.get(0))<=Common.getValue(currentlist.get(0)))
+			{
+				 return 0;
+			}else {
+				return 1;
+			}
+		}
+		//顺子,连队，飞机裸
+		if(cType==CardType.c123||cType==CardType.c1122||cType==CardType.c111222)
+		{
+			if(Common.getValue(c.get(0))<=Common.getValue(currentlist.get(0)))
+				return 0;
+			else 
+				return 1;
+		}
+		//按重复多少排序
+		//3带1,3带2 ,飞机带单，双,4带1,2,只需比较第一个就行，独一无二的 
+		if(cType==CardType.c31||cType==CardType.c32||cType==CardType.c411||cType==CardType.c422
+				||cType==CardType.c11122234||cType==CardType.c1112223344){
+			List<Card> a1=Common.getOrder2(c); //我出的牌
+			List<Card> a2=Common.getOrder2(currentlist);//当前最大牌
+			if(Common.getValue(a1.get(0))<Common.getValue(a2.get(0)))
+				return 0;
+		}
+		return 1;
+	}
+	//按照重复次数排序
+	public static List getOrder2(List<Card> list){
+		List<Card> list2=new ArrayList<Card>(list);
+		List<Card> list3=new ArrayList<Card>();
+		List<Integer> list4=new ArrayList<Integer>();
+		int len=list2.size();
+		int a[]=new int[20];
+		for(int i=0;i<20;i++)
+			a[i]=0;
+		for(int i=0;i<len;i++)
+		{
+			a[Common.getValue(list2.get(i))]++;
+		}
+		int max=0;
+		for(int i=0;i<20;i++){
+			max=0;
+			for(int j=19;j>=0;j--){
+				if(a[j]>a[max])
+					max=j;
+			}
+
+			for(int k=0;k<len;k++){
+				if(Common.getValue(list2.get(k))==max){
+					list3.add(list2.get(k));
+				}
+			}
+			list2.remove(list3);
+			a[max]=0;
+		}
+		return list3;
+	}
+}
+class Card_index{
+	List a[]=new ArrayList[4];//单张
+}
+4.Main.java
+package com;
+
+import java.awt.Color;
+import java.awt.Container;
+import java.awt.Point;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JTextField;
+import javax.swing.SwingUtilities;
+
+public class Main extends JFrame implements ActionListener {
+
+	public Container container = null;// 定义容器
+	JMenuItem start, exit, about;// 定义菜单按钮
+	JButton landlord[]=new JButton[2];//抢地主按钮
+	JButton publishCard[]=new JButton[2];//出牌按钮
+	int dizhuFlag;//地主标志
+	int turn;
+	JLabel dizhu; //地主图标
+	List<Card> currentList[] =new ArrayList[3]; //  当前的出牌
+	List<Card> playerList[] = new ArrayList[3]; // 定义3个玩家表
+	List<Card> lordList;//地主牌
+	Card card[] = new Card[56]; // 定义54张牌
+	JTextField time[]=new JTextField[3]; //计时器
+	Time t; //定时器（线程）
+	boolean nextPlayer=false; //转换角色
+	public Main(){
+
+		Init();// 初始化
+		SetMenu();// 创建菜单 按钮(抢地主，发牌,计时器)
+		this.setVisible(true);
+		CardInit();//发牌
+		getLord(); //发完牌开始抢地主
+		time[1].setVisible(true);
+		//线程安全性,把非主线程的UI控制放到里面
+		SwingUtilities.invokeLater(new NewTimer(this,10));
+		
+	}
+	// 抢地主
+	public void getLord(){
+		//System.out.println(CardType.c0.toString());
+		for(int i=0;i<2;i++)
+			landlord[i].setVisible(true);
+	}
+	//初始化牌
+	// 发牌洗牌
+	public void CardInit() {
+		
+		int count = 1;
+		//初始化牌
+		for (int i = 1; i <= 5; i++) {
+			for (int j = 1; j <= 13; j++) {
+				if ((i == 5) && (j > 2))
+					break;
+				else {
+					card[count] = new Card(this, i + "-" + j, false);
+					card[count].setLocation(350, 50);
+					container.add(card[count]);
+					count++;
+				}
+			}
+		}
+		//打乱顺序
+		for(int i=0;i<100;i++){
+			Random random=new Random();
+			int a=random.nextInt(54)+1;
+			int b=random.nextInt(54)+1;
+			Card k=card[a];
+			card[a]=card[b];
+			card[b]=k;
+		}
+		//开始发牌
+		for(int i=0;i<3;i++)
+			playerList[i]=new ArrayList<Card>(); //玩家牌
+		lordList=new ArrayList<Card>();//地主牌三张
+		int t=0;
+		for(int i=1;i<=54;i++)
+		{
+			if(i>=52)//地主牌
+			{
+				Common.move(card[i], card[i].getLocation(),new Point(300+(i-52)*80,10));
+				lordList.add(card[i]);
+				continue;
+			}
+			switch ((t++)%3) {
+			case 0:
+				//左边玩家
+				Common.move(card[i], card[i].getLocation(),new Point(50,60+i*5));
+				playerList[0].add(card[i]);
+				break;
+			case 1:
+				//我
+				Common.move(card[i], card[i].getLocation(),new Point(180+i*7,450));
+				playerList[1].add(card[i]);
+				card[i].turnFront(); //显示正面
+				break;
+			case 2:
+				//右边玩家
+				Common.move(card[i], card[i].getLocation(),new Point(700,60+i*5));
+				playerList[2].add(card[i]);
+				break;
+			}
+			//card[i].turnFront(); //显示正面
+			container.setComponentZOrder(card[i], 0);
+		}
+		//发完牌排序，从大到小
+		for(int i=0;i<3;i++)
+		{
+			Common.order(playerList[i]);
+			Common.rePosition(this,playerList[i],i);//重新定位
+		}
+		dizhu=new JLabel(new ImageIcon("images/dizhu.gif"));
+		dizhu.setVisible(false);
+		dizhu.setSize(40, 40);
+		container.add(dizhu);
+	}
+
+	// 初始化窗体
+	public void Init() {
+
+		this.setTitle("斗地主游戏---欢乐斗地主");
+		this.setSize(830, 620);
+		setResizable(false);
+		setLocationRelativeTo(getOwner()); // 屏幕居中
+		container = this.getContentPane();
+		container.setLayout(null);
+		this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		container.setBackground(new Color(0, 112, 26)); // 背景为绿色
+
+	}
+
+	// 创建菜单 功能按钮
+	public void SetMenu() {
+		JMenuBar jMenuBar = new JMenuBar();
+		JMenu game = new JMenu("游戏");
+		JMenu help = new JMenu("帮助");
+
+		start = new JMenuItem("新游戏");
+		exit = new JMenuItem("退出");
+		about = new JMenuItem("关于");
+
+		start.addActionListener(this);
+		exit.addActionListener(this);
+		about.addActionListener(this);
+
+		game.add(start);
+		game.add(exit);
+		help.add(about);
+
+		jMenuBar.add(game);
+		jMenuBar.add(help);
+		this.setJMenuBar(jMenuBar);
+		
+		landlord[0]=new JButton("抢地主");
+		landlord[1]=new JButton("不     抢");
+		publishCard[0]= new JButton("出牌");
+		publishCard[1]= new JButton("不要");
+		for(int i=0;i<2;i++)
+		{
+			publishCard[i].setBounds(320+i*100, 400, 60, 20);
+			landlord[i].setBounds(320+i*100, 400,75,20);
+			container.add(landlord[i]);
+			landlord[i].addActionListener(this);
+			landlord[i].setVisible(false);
+			container.add(publishCard[i]);
+			publishCard[i].setVisible(false);
+			publishCard[i].addActionListener(this);
+		}
+		for(int i=0;i<3;i++){
+			time[i]=new JTextField("倒计时:");
+			time[i].setVisible(false);
+			container.add(time[i]);
+		}
+		time[0].setBounds(140, 230, 60, 20);
+		time[1].setBounds(374, 360, 60, 20);
+		time[2].setBounds(620, 230, 60, 20);
+		
+		for(int i=0;i<3;i++)
+		{
+			currentList[i]=new ArrayList<Card>();
+		}
+		
+	}
+
+	@Override
+	public void actionPerformed(ActionEvent e) {
+		// TODO Auto-generated method stub
+		if (e.getSource() == exit) {
+			this.dispose();
+		}
+		if (e.getSource() == about) {
+			JOptionPane.showMessageDialog(this, "欢乐斗地主！");
+		}
+		if (e.getSource() == start) {
+			 this.restart();
+		}
+		if(e.getSource()==landlord[0])
+		{
+			time[1].setText("抢地主");
+			t.isRun=false; //时钟终结
+		}
+		if(e.getSource()==landlord[1])
+		{
+			time[1].setText("不抢");
+			t.isRun=false; //时钟终结
+		}
+		//如果是不要
+		if(e.getSource()==publishCard[1])
+		{
+			this.nextPlayer=true;
+			currentList[1].clear();
+			time[1].setText("不要");
+		}
+		//如果是出牌按钮
+		if(e.getSource()==publishCard[0])
+		{
+			List<Card> c=new ArrayList<Card>();
+			//点选出牌
+			for(int i=0;i<playerList[1].size();i++)
+			{
+				Card card=playerList[1].get(i);
+				if(card.clicked)
+				{
+					c.add(card);
+				}
+			}
+			int flag=0;
+			
+			//如果我主动出牌
+			if(time[0].getText().equals("不要")&&time[2].getText().equals("不要"))
+			{
+			
+				if(Common.jugdeType(c)!=CardType.c0)
+					flag=1;//表示可以出牌
+			}//如果我跟牌
+			else{
+			
+				flag=Common.checkCards(c,currentList);
+			}
+			//判断是否符合出牌
+			if(flag==1)
+			{
+				currentList[1]=c;
+				playerList[1].removeAll(currentList[1]);//移除走的牌
+				//定位出牌
+				Point point=new Point();
+				point.x=(770/2)-(currentList[1].size()+1)*15/2;;
+				point.y=300;
+				for(int i=0,len=currentList[1].size();i<len;i++)
+				{
+					Card card=currentList[1].get(i);
+					Common.move(card, card.getLocation(), point);
+					point.x+=15;
+				}
+				//抽完牌后重新整理牌
+				Common.rePosition(this, playerList[1], 1);
+				time[1].setVisible(false);
+				this.nextPlayer=true;
+			}
+
+		}
+	}
+
+	private void restart() {
+		this.dispose();
+		new Main();
+	}
+	public static void main(String args[]) {
+		
+			new Main();
+		
+	}
+
+}
+class NewTimer implements Runnable{
+
+	Main main;
+	int i;
+	public NewTimer(Main m,int i){
+		this.main=m;
+		this.i=i;
+	}
+	@Override
+	public void run() {
+		// TODO Auto-generated method stub
+		main.t=new Time(main,10);//从10开始倒计时
+		main.t.start();
+	}
+	
+}
+5.Modle.java
+package com;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class Model {
+	//一组牌
+	int value; //权值
+	int num;// 手数 (几次能够走完，没有挡的情况下)
+	List<String> a1=new ArrayList<String>(); //单张
+	List<String> a2=new ArrayList<String>(); //对子
+	List<String> a3=new ArrayList<String>(); //3带
+	List<String> a123=new ArrayList<String>(); //连子
+	List<String> a112233=new ArrayList<String>(); //连牌
+	List<String> a111222=new ArrayList<String>(); //飞机
+	List<String> a4=new ArrayList<String>(); //炸弹
+}
+6.NewSwing.java
+package com;
+
+import javax.swing.SwingUtilities;
+
+public class NewSwing {
+	
+}
+7.Time.java
+package com;
+
+import java.awt.Point;
+import java.util.ArrayList;
+import java.util.List;
+
+import javax.swing.JOptionPane;
+import javax.swing.SwingUtilities;
+
+public class Time extends Thread {
+	Main main;
+	boolean isRun = true;
+	int i = 10;
+
+	public Time(Main m, int i) {
+		this.main = m;
+		this.i = i;
+	}
+
+	@Override
+	public void run() {
+
+		while (i > -1 && isRun) {
+			main.time[1].setText("倒计时:" + i--);
+			second(1);// 等一秒
+		}
+		if (i == -1)// 正常终结，说明超时
+			main.time[1].setText("不抢");
+		main.landlord[0].setVisible(false);
+		main.landlord[1].setVisible(false);
+		for (Card card2 : main.playerList[1])
+			card2.canClick = true;// 可被点击
+		// 如果自己抢到地主
+		if (main.time[1].getText().equals("抢地主")) {
+			// 得到地主牌
+			main.playerList[1].addAll(main.lordList);
+			openlord(true);
+			second(2);// 等待五秒
+			Common.order(main.playerList[1]);
+			Common.rePosition(main, main.playerList[1], 1);
+			setlord(1);
+		} else {
+			// 电脑选地主
+			if (Common.getScore(main.playerList[0]) < Common
+					.getScore(main.playerList[2])) {
+				main.time[2].setText("抢地主");
+				main.time[2].setVisible(true);
+				setlord(2);// 设定地主
+				openlord(true);
+				second(3);
+				main.playerList[2].addAll(main.lordList);
+				Common.order(main.playerList[2]);
+				Common.rePosition(main, main.playerList[2], 2);
+				openlord(false);
+
+			} else {
+				main.time[0].setText("抢地主");
+				main.time[0].setVisible(true);
+				setlord(0);// 设定地主
+				openlord(true);
+				second(3);
+				main.playerList[0].addAll(main.lordList);
+				Common.order(main.playerList[0]);
+				Common.rePosition(main, main.playerList[0], 0);
+				//openlord(false);
+
+			}
+		}
+		// 选完地主后 关闭地主按钮
+		main.landlord[0].setVisible(false);
+		main.landlord[1].setVisible(false);
+		turnOn(false);
+		for (int i = 0; i < 3; i++)
+		{
+			main.time[i].setText("不要");
+			main.time[i].setVisible(false);
+		}
+		// 开始游戏 根据地主不同顺序不同
+		main.turn=main.dizhuFlag;
+		while (true) {
+			
+			if(main.turn==1) //我
+			{
+				turnOn(true);// 出牌按钮 --我出牌
+				timeWait(30, 1);// 我自己的定时器
+				turnOn(false);//选完关闭
+				main.turn=(main.turn+1)%3;
+				if(win())//判断输赢
+					break;
+			}
+			if (main.turn==0) 
+			{
+				computer0();
+				main.turn=(main.turn+1)%3;
+				if(win())//判断输赢
+					break;
+			}
+			if(main.turn==2)
+			{
+				computer2();
+				main.turn=(main.turn+1)%3;
+				if(win())//判断输赢
+					break;
+			}
+		}
+	}
+
+	// 等待i秒
+	public void second(int i) {
+		try {
+			Thread.sleep(i * 1000);
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+
+	// 地主牌翻看
+	public void openlord(boolean is) {
+		for (int i = 0; i < 3; i++) {
+			if (is)
+				main.lordList.get(i).turnFront(); // 地主牌翻看
+			else {
+				main.lordList.get(i).turnRear(); // 地主牌闭合
+			}
+			main.lordList.get(i).canClick = true;// 可被点击
+		}
+	}
+
+	// 设定地主
+	public void setlord(int i) {
+		Point point = new Point();
+		if (i == 1)// 我是地主
+		{
+			point.x = 80;
+			point.y = 430;
+			main.dizhuFlag = 1;// 设定地主
+		}
+		if (i == 0) {
+			point.x = 80;
+			point.y = 20;
+			main.dizhuFlag = 0;
+		}
+		if (i == 2) {
+			point.x = 700;
+			point.y = 20;
+			main.dizhuFlag = 2;
+		}
+		main.dizhu.setLocation(point);
+		main.dizhu.setVisible(true);
+	}
+
+	// 打开出牌按钮
+	public void turnOn(boolean flag) {
+		main.publishCard[0].setVisible(flag);
+		main.publishCard[1].setVisible(flag);
+	}
+
+	// 电脑0走牌(我代表1)
+	public void computer0() {
+		timeWait(1, 0); // 定时
+		ShowCard(0); // 出牌
+		
+	}
+
+	// 电脑2走牌(我代表1)
+	public void computer2() {
+		timeWait(1, 2); // 定时
+		ShowCard(2); // 出牌
+		
+	}
+
+	// 走牌
+	public void ShowCard(int role) {
+		Model model = Common.getModel(main.playerList[role]);
+		// 待走的牌
+		List<String> list = new ArrayList();
+		// 如果是主动出牌
+		if (main.time[(role + 1) % 3].getText().equals("不要")
+				&& main.time[(role + 2) % 3].getText().equals("不要")) {
+			// 有单出单 (除开3带，飞机能带的单牌)
+			if (model.a1.size() > (model.a111222.size() * 2 + model.a3.size())) {
+				list.add(model.a1.get(model.a1.size() - 1));
+			}// 有对子出对子 (除开3带，飞机)
+			else if (model.a2.size() > (model.a111222.size() * 2 + model.a3
+					.size())) {
+				list.add(model.a2.get(model.a2.size() - 1));
+			}// 有顺子出顺子
+			else if (model.a123.size() > 0) {
+				list.add(model.a123.get(model.a123.size() - 1));
+			}// 有3带就出3带，没有就出光3
+			else if (model.a3.size() > 0) {
+				// 3带单,且非关键时刻不能带王，2
+				if (model.a1.size() > 0) {
+					list.add(model.a1.get(model.a1.size() - 1));
+				}// 3带对
+				else if (model.a2.size() > 0) {
+					list.add(model.a2.get(model.a2.size() - 1));
+				}
+				list.add(model.a3.get(model.a3.size() - 1));
+			}// 有双顺出双顺
+			else if (model.a112233.size() > 0) {
+				list.add(model.a112233.get(model.a112233.size() - 1));
+			}// 有飞机出飞机
+			else if (model.a111222.size() > 0) {
+				String name[] = model.a111222.get(0).split(",");
+				// 带单
+				if (name.length / 3 <= model.a1.size()) {
+					list.add(model.a111222.get(model.a111222.size() - 1));
+					for (int i = 0; i < name.length / 3; i++)
+						list.add(model.a1.get(i));
+				} else if (name.length / 3 <= model.a2.size())// 带双
+				{
+					list.add(model.a111222.get(model.a111222.size() - 1));
+					for (int i = 0; i < name.length / 3; i++)
+						list.add(model.a2.get(i));
+				}
+				// 有炸弹出炸弹
+			} else if (model.a4.size() > 0) {
+				// 4带2,1
+				int sizea1 = model.a1.size();
+				int sizea2 = model.a2.size();
+				if (sizea1 >= 2) {
+					list.add(model.a1.get(sizea1 - 1));
+					list.add(model.a1.get(sizea1 - 2));
+					list.add(model.a4.get(0));
+				
+				} else if (sizea2 >= 2) {
+					list.add(model.a2.get(sizea1 - 1));
+					list.add(model.a2.get(sizea1 - 2));
+					list.add(model.a4.get(0));
+					
+				} else {// 直接炸
+					list.add(model.a4.get(0));
+					
+				}
+
+			}
+		}// 如果是跟牌
+		else {
+			List<Card> player = main.currentList[(role + 2) % 3].size() > 0 
+					? main.currentList[(role + 2) % 3]
+					: main.currentList[(role + 1) % 3];
+			
+			CardType cType=Common.jugdeType(player);
+			//如果是单牌
+			if(cType==CardType.c1)
+			{
+				AI_1(model.a1, player, list, role);
+			}//如果是对子
+			else if(cType==CardType.c2)
+			{
+				AI_1(model.a2, player, list, role);
+			}//3带
+			else if(cType==CardType.c3)
+			{
+				AI_1(model.a3, player, list, role);
+			}//炸弹
+			else if(cType==CardType.c4)
+			{
+				AI_1(model.a4, player, list, role);
+			}//如果是3带1
+			else if(cType==CardType.c31){
+				 //偏家 涉及到拆牌
+				//if((role+1)%3==main.dizhuFlag)
+					AI_2(model.a3, model.a1, player, list, role);
+			}//如果是3带2
+			else if(cType==CardType.c32){
+				 //偏家
+				//if((role+1)%3==main.dizhuFlag)
+					AI_2(model.a3, model.a2, player, list, role);
+			}//如果是4带11
+			else if(cType==CardType.c411){
+					AI_5(model.a4, model.a1, player, list, role);
+			}
+			//如果是4带22
+			else if(cType==CardType.c422){
+					AI_5(model.a4, model.a2, player, list, role);
+			}
+			//顺子
+			else if(cType==CardType.c123){
+				AI_3(model.a123, player, list, role);
+			}
+			//双顺
+			else if(cType==CardType.c1122){
+				AI_3(model.a112233, player, list, role);
+			}
+			//飞机带单
+			else if(cType==CardType.c11122234){
+				AI_4(model.a111222,model.a1, player, list, role);
+			}
+			//飞机带对
+			else if(cType==CardType.c1112223344){
+				AI_4(model.a111222,model.a2, player, list, role);
+			}
+			//炸弹
+			if(list.size()==0)
+			{
+				int len4=model.a4.size();
+				if(len4>0)
+					list.add(model.a4.get(len4-1));
+			}
+		}
+
+		// 定位出牌
+		main.currentList[role].clear();
+		if (list.size() > 0) {
+			Point point = new Point();
+			if (role == 0)
+				point.x = 200;
+			if (role == 2)
+				point.x = 550;
+			point.y = (400 / 2) - (list.size() + 1) * 15 / 2;// 屏幕中部
+			// 将name转换成Card
+			for (int i = 0, len = list.size(); i < len; i++) {
+				List<Card> cards = getCardByName(main.playerList[role],
+						list.get(i));
+				for (Card card : cards) {
+					Common.move(card, card.getLocation(), point);
+					point.y += 15;
+					main.currentList[role].add(card);
+					main.playerList[role].remove(card);
+				}
+			}
+			Common.rePosition(main, main.playerList[role], role);
+		} else {
+			main.time[role].setVisible(true);
+			main.time[role].setText("不要");
+		}
+		for(Card card:main.currentList[role])
+			card.turnFront();
+	}
+
+	// 按name获得Card，方便从Model取出
+	public List getCardByName(List<Card> list, String n) {
+		String[] name = n.split(",");
+		List cardsList = new ArrayList<Card>();
+		int j = 0;
+		for (int i = 0, len = list.size(); i < len; i++) {
+			if (j < name.length && list.get(i).name.equals(name[j])) {
+				cardsList.add(list.get(i));
+				i = 0;
+				j++;
+			}
+		}
+		return cardsList;
+	}
+	//顺子
+	public void AI_3(List<String> model,List<Card> player,List<String> list,int role){
+		
+		for(int i=0,len=model.size();i<len;i++)
+		{
+			String []s=model.get(i).split(",");
+			if(s.length==player.size()&&getValueInt(model.get(i))>Common.getValue(player.get(0)))
+			{
+				list.add(model.get(i));
+				return;
+			}
+		}
+	}
+	//飞机带单，双
+	public void AI_4(List<String> model1,List<String> model2,List<Card> player,List<String> list,int role){
+		//排序按重复数
+		player=Common.getOrder2(player);
+		int len1=model1.size();
+		int len2=model2.size();
+		
+		if(len1<1 || len2<1)
+			return;
+		for(int i=0;i<len1;i++){
+			String []s=model1.get(i).split(",");
+			String []s2=model2.get(0).split(",");
+			if((s.length/3<=len2)&&(s.length*(3+s2.length)==player.size())&&getValueInt(model1.get(i))>Common.getValue(player.get(0)))
+			{
+				list.add(model1.get(i));
+				for(int j=1;j<=s.length/3;j++)
+					list.add(model2.get(len2-j));
+			}
+		}
+	}
+	//4带1，2
+	public void AI_5(List<String> model1,List<String> model2,List<Card> player,List<String> list,int role){
+		//排序按重复数
+		player=Common.getOrder2(player);
+		int len1=model1.size();
+		int len2=model2.size();
+		
+		if(len1<1 || len2<2)
+			return;
+		for(int i=0;i<len1;i++){
+			if(getValueInt(model1.get(i))>Common.getValue(player.get(0)))
+			{
+				list.add(model1.get(i));
+				for(int j=1;j<=2;j++)
+					list.add(model2.get(len2-j));
+			}
+		}
+	}
+	//单牌，对子，3个，4个,通用
+	public void AI_1(List<String> model,List<Card> player,List<String> list,int role){
+		//顶家
+		if((role+1)%3==main.dizhuFlag)
+		{
+			
+			for(int i=0,len=model.size();i<len;i++)
+			{
+				if(getValueInt(model.get(i))>Common.getValue(player.get(0)))
+				{
+					list.add(model.get(i));
+					break;
+				}
+			}
+		}else {//偏家
+			
+			for(int len=model.size(),i=len-1;i>=0;i--)
+			{
+				if(getValueInt(model.get(i))>Common.getValue(player.get(0)))
+				{
+					list.add(model.get(i));
+					break;
+				}
+			}
+		}
+	}
+	//3带1,2,4带1,2
+	public void AI_2(List<String> model1,List<String> model2,List<Card> player,List<String> list,int role){
+		//model1是主牌,model2是带牌,player是玩家出的牌,,list是准备回的牌
+		//排序按重复数
+		player=Common.getOrder2(player);
+		int len1=model1.size();
+		int len2=model2.size();
+		//如果有王直接炸了
+		if(len1>0&&model1.get(0).length()<10)
+		{
+			list.add(model1.get(0));
+			System.out.println("王炸");
+			return;
+		}
+		if(len1<1 || len2<1)
+			return;
+		for(int len=len1,i=len-1;i>=0;i--)
+		{	
+			if(getValueInt(model1.get(i))>Common.getValue(player.get(0)))
+			{
+				list.add(model1.get(i));
+				break;
+			}
+		} 
+		list.add(model2.get(len2-1));
+		if(list.size()<2)
+			list.clear();
+	}
+	// 延时，模拟时钟
+	public void timeWait(int n, int player) {
+
+		if (main.currentList[player].size() > 0)
+			Common.hideCards(main.currentList[player]);
+		if (player == 1)// 如果是我，10秒到后直接下一家出牌
+		{
+			int i = n;
+
+			while (main.nextPlayer == false && i >= 0) {
+				// main.container.setComponentZOrder(main.time[player], 0);
+				main.time[player].setText("倒计时:" + i);
+				main.time[player].setVisible(true);
+				second(1);
+				i--;
+			}
+			if (i == -1) {
+				main.time[player].setText("超时");
+			}
+			main.nextPlayer = false;
+		} else {
+			for (int i = n; i >= 0; i--) {
+				second(1);
+				// main.container.setComponentZOrder(main.time[player], 0);
+				main.time[player].setText("倒计时:" + i);
+				main.time[player].setVisible(true);
+			}
+		}
+		main.time[player].setVisible(false);
+	}
+	//通过name估值
+	public  int getValueInt(String n){
+		String name[]=n.split(",");
+		String s=name[0];
+		int i=Integer.parseInt(s.substring(2, s.length()));
+		if(s.substring(0, 1).equals("5"))
+			i+=3;
+		if(s.substring(2, s.length()).equals("1")||s.substring(2, s.length()).equals("2"))
+			i+=13;
+		return i;
+	}
+	//判断输赢
+	public boolean win(){
+		for(int i=0;i<3;i++){
+			if(main.playerList[i].size()==0)
+			{
+				String s;
+				if(i==1)
+				{
+					s="恭喜你，胜利了!";
+				}else {
+					s="恭喜电脑"+i+",赢了! 你的智商有待提高哦";
+				}
+				JOptionPane.showMessageDialog(main, s);
+				return true;
+			}
+		}
+		return false;
+	}
+}
 
